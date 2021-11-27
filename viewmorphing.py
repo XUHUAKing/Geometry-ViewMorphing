@@ -8,63 +8,10 @@ from scipy import linalg, optimize
 from math import sin, cos, asin, atan, pi, sqrt, floor, ceil
 
 import utils
-# from feature_detection import feature_points_detection, normalize
+from feature_detection import feature_points_detection
 from prewarp import compute_prewarp
 from postwarp import computeH
 from computeF import computeF
-
-def compute_rotation(v, t):
-    # get rotation matrix
-    ct = np.cos(t)
-    st = np.sin(t)
-    t = 1-ct
-    R = np.array([[t*v[0]*v[0] + ct, t*v[0]*v[1], st*v[1]],
-                   [t*v[0]*v[1], t*v[1]*v[1] + ct, -st*v[0]],
-                   [-st*v[1], st*v[0], ct]])
-    return R.squeeze()
-
-def compute_prewarp(F):
-    # get eigenvalues and eigenvectors
-    val0, vec0 = np.linalg.eig(F)
-    val1, vec1 = np.linalg.eig(F.T)
-
-    # get epipoles
-    i0 = np.where(np.logical_and(val0>-1e-4, val0<1e-4))[0]
-    i1 = np.where(np.logical_and(val1>-1e-4, val1<1e-4))[0]
-    e0, e1 = vec0[:, i0], vec1[:, i1]
-
-    # get rotation axis
-    d0 = np.array([-e0[1], e0[0], 0])
-    
-    # get corresponding axis in input
-    F0 = F.dot(d0)
-    d1 = np.array([-F0[1], F0[0], 0])
-
-    # get rotation angle
-    theta0 = np.arctan(e0[2]/(d0[1]*e0[0] - d0[0]*e0[1]))
-    theta1 = np.arctan(e1[2]/(d1[1]*e1[0] - d1[0]*e1[1]))
-    
-    # get rotation matrix
-    R0, R1 = compute_rotation(d0, theta0), compute_rotation(d1, theta1)
-    
-    # update epipoles
-    re0, re1 = R0@e0, R1@e1
-
-    # update angle
-    phi0, phi1 = -np.arctan(re0[1]/re0[0]), -np.arctan(re1[1]/re1[0])
-
-    # rotation given by p0 and p1
-    rphi0 = np.array([[np.cos(phi0), -np.sin(phi0), 0],
-                    [np.sin(phi0), np.cos(phi0), 0],
-                    [0, 0, 1]])
-    rphi1 = np.array([[np.cos(phi1), -np.sin(phi1), 0],
-                    [np.sin(phi1), np.cos(phi1), 0],
-                    [0, 0, 1]])
-
-    H0, H1 = np.array(rphi0@R0, dtype='float'), np.array(rphi1@R1, dtype='float')
-
-    return H0, H1
-
 
 def bilinear(x, y, source_img):
     # overflow case
@@ -91,28 +38,6 @@ def bilinear(x, y, source_img):
             mat1.dot(mat2[:, :, 2]).dot(mat3)/((ceil(x) - floor(x))*(ceil(y) - floor(y))),
         ])
     return f
-
-def feature_points_detection(img, show=False):
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor('./detection/shape_predictor_68_face_landmarks.dat')
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    dets = detector(gray, 1)
-    points = []
-    key_points_set = [37, 40, 43, 46, 31, 49, 55, 58]
-    img_copy = img.copy()
-    for det in dets:
-        shape = predictor(gray, det)
-        for i, p in enumerate(shape.parts()):
-            points.append((p.x, p.y))
-            # if show and ((i + 1) in key_points_set):
-            if show:
-                cv2.circle(img_copy, (p.x, p.y), 2, (0, 0, 255), 1)
-    if show:
-        cv2.imshow("feature points", img_copy)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-    return points
-    
 
 def delaunay(img, points, corners=None, show=False):
     

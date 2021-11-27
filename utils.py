@@ -1,6 +1,30 @@
 import json
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+from prewarp import get_epipole
+
+def normalize(pts):
+    '''
+    Input: pts: list of tuple or np.array n x 2
+    Apply mean normalize for stability
+    Ouput: normalized_pts: np.array n x 3
+    '''
+    centriod = np.mean(pts, axis=0)
+    assert len(centriod) == 2
+    pts_offset = pts - centriod
+
+    scale = np.sqrt(2) / np.mean(np.sqrt(pts_offset[:, 0] ** 2 + pts_offset[:, 1] ** 2))
+    # transform pts using
+    transformation = np.diag([scale, scale, 1])
+    transformation[0, 2] = -scale * centriod[0]
+    transformation[1, 2] = -scale * centriod[1]
+
+    homogenous_pts = np.hstack([pts, np.ones([len(pts), 1])])
+    normalized_pts = (transformation @ homogenous_pts.T).T
+    # return as len(pts) x 3
+    assert len(normalized_pts) == len(pts)
+    return normalized_pts, transformation
 
 def read_feature_points(fpath):
     json_raw = {}
@@ -43,3 +67,48 @@ def drawPoints(img, pts):
     for i in range(pts.shape[0]):
         cv2.circle(vis_img, (pts[i,0], pts[i,1]), radius=3, color=(0, 0, 255), thickness=-1)
     return vis_img
+
+def displayEpipolarF(I1, I2, F):
+    e1 =  get_epipole(F)
+    e2 =  get_epipole(F.T)
+
+    sy, sx, _ = I2.shape
+
+    f, [ax1, ax2] = plt.subplots(1, 2, figsize=(12, 9))
+    ax1.imshow(I1)
+    ax1.set_title('Select a point in this image')
+    ax1.set_axis_off()
+    ax2.imshow(I2)
+    ax2.set_title('Verify that the corresponding point \n is on the epipolar line in this image')
+    ax2.set_axis_off()
+    ax2.autoscale(enable=False, axis='both')
+    while True:
+        plt.sca(ax1)
+        x, y = plt.ginput(1, mouse_stop=2)[0]
+
+        xc = x
+        yc = y
+        v = np.array([xc, yc, 1])
+        l = F.dot(v)
+        s = np.sqrt(l[0]**2+l[1]**2)
+
+        if s==0:
+            raise Exception('Zero line vector in displayEpipolar')
+
+        l = l/s
+
+        if l[0] != 0:
+            ye = sy-1
+            ys = 0
+            xe = -(l[1] * ye + l[2])/l[0]
+            xs = -(l[1] * ys + l[2])/l[0]
+        else:
+            xe = sx-1
+            xs = 0
+            ye = -(l[0] * xe + l[2])/l[1]
+            ys = -(l[0] * xs + l[2])/l[1]
+
+        # plt.plot(x,y, '*', 'MarkerSize', 6, 'LineWidth', 2)
+        ax1.plot(x, y, '*', MarkerSize=6, linewidth=2)
+        ax2.plot([xs, xe], [ys, ye], linewidth=2)
+        plt.draw()

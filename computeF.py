@@ -1,23 +1,6 @@
 import numpy as np
 import cv2
-
-"""redirect the centroid of points to origin"""
-def normalize(points):
-    points = np.array(points)
-    mean_xy = np.mean(points, axis=0)
-    shifted_points = points - mean_xy
-
-    # transform distance form origin to \sqrt{2}
-    scale_f = np.sqrt(2) / np.mean(np.sqrt(shifted_points[:, 0] ** 2 + shifted_points[:, 1] ** 2))
-    t_norm = np.array([[scale_f, 0, -scale_f * mean_xy[0]],
-                       [0, scale_f, -scale_f * mean_xy[1]],
-                       [0, 0, 1]
-                       ])
-    homo_points = np.append(points, np.ones((points.shape[0], 1)), axis=1)
-    norm_points = np.matmul(t_norm, homo_points.T).T
-
-    return norm_points, t_norm
-
+from utils import normalize
 
 """compute fundamental matrix using 8 points"""
 def computeF(pts1, pts2):
