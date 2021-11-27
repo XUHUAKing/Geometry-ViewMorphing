@@ -558,17 +558,24 @@ if __name__ == '__main__':
         #                        int((1 - alpha) * input_points_four[p][1] + alpha * target_points_four[p][1])) for p in range(4)]
         # co = solve_prjective(control_points_four, postwarping_four)
         # res, _ = do_projective_warping(res, co, res.shape[0], res.shape[1], corners=False, shiftx=0, shifty=0)
-
-        control_points_eight = [(int((1 - alpha) * input_corners[p][0] + alpha * target_corners[p][0]),
+        control_points_four = [(int((1 - alpha) * input_corners[p][0] + alpha * target_corners[p][0]),
                              int((1 - alpha) * input_corners[p][1] + alpha * target_corners[p][1])) for p in range(4)]
         new_height = max(input.shape[0], target.shape[0])
         new_width = max(input.shape[1], target.shape[1])
-        postwarping_eight = [(0, 0), (0, new_height - 1), (new_width - 1, new_height - 1), (new_width - 1, 0)]#, \
+        postwarping_four = [(0, 0), (0, new_height - 1), (new_width - 1, new_height-1), (new_width - 1, 0)]
+        co = solve_prjective(control_points_four, postwarping_four)
+        # res, _ = do_projective_warping(res, co, new_height, new_width, corners=False, shiftx=0, shifty=0)
+
+        # control_points_eight = [(int((1 - alpha) * input_corners[p][0] + alpha * target_corners[p][0]),
+        #                      int((1 - alpha) * input_corners[p][1] + alpha * target_corners[p][1])) for p in range(4)]
+        # new_height = max(input.shape[0], target.shape[0])
+        # new_width = max(input.shape[1], target.shape[1])
+        # postwarping_eight = [(0, 0), (0, new_height - 1), (new_width - 1, new_height - 1), (new_width - 1, 0)]#, \
                             # (new_width - 1, (new_height - 1)/2), ((new_width - 1)/2, new_height - 1), (0, (new_height - 1)/2), ((new_width - 1)/2, 0)]
         # Find homography using the points
-        H_s = homography_points(control_points_eight, postwarping_eight)
+        # H_s = homography_points(control_points_eight, postwarping_eight)
         # warp image to desired plane
-        res = cv2.warpPerspective(res, H_s, (new_height, new_width))
+        res = cv2.warpPerspective(res, H_s, (new_width, new_height))
 
         # co = solve_prjective(control_points_four, postwarping_four)
         # # res, _ = do_projective_warping(res, co, new_height, new_width, corners=False, shiftx=0, shifty=0)
