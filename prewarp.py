@@ -67,9 +67,10 @@ def compute_prewarp(F, all=False):
     # step 3: get homography
     H1 = R1_scanline @ R1_plane
     H2 = R2_scanline @ R2_plane
+    H1 /= H1[-1,-1]
+    H2 /= H2[-1,-1]
     if all:
         return H1, H2, R1_plane, R2_plane, R1_scanline, R2_scanline
-
     return H1, H2
 
 
