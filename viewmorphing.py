@@ -575,7 +575,7 @@ if __name__ == '__main__':
         # Find homography using the points
         # H_s = homography_points(control_points_eight, postwarping_eight)
         # warp image to desired plane
-        res = cv2.warpPerspective(res, H_s, (new_width, new_height))
+        res = cv2.warpPerspective(res, co, (new_width, new_height), flags=cv2.INTER_LINEAR)
 
         # co = solve_prjective(control_points_four, postwarping_four)
         # # res, _ = do_projective_warping(res, co, new_height, new_width, corners=False, shiftx=0, shifty=0)
