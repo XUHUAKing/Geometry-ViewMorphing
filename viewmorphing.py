@@ -1,5 +1,4 @@
-import ast
-import json
+import os
 import dlib
 import argparse
 import numpy as np
@@ -7,103 +6,12 @@ import matplotlib.pyplot as plt
 import cv2
 from scipy import linalg, optimize
 from math import sin, cos, asin, atan, pi, sqrt, floor, ceil
+
 import utils
-from postwarp import homography_points
-
-
-def read_feature_points(fpath):
-    json_raw = {}
-    points = []
-    with open(fpath.replace('.png', '.json').replace('.jpg', '.json'), 'r') as f:
-        json_raw = json.load(f)
-    for item in json_raw['shapes']:
-        points.append([round(item['points'][0][0]), round(item['points'][0][1])])
-    return points
-
-
-def normalize(points):
-    # redirect the centroid of points to origin
-    points = np.array(points)
-    mean_xy = np.mean(points, axis=0)
-    shifted_points = points - mean_xy
-
-    # transform distance form origin to \sqrt{2}
-    scale_f = np.sqrt(2) / np.mean(np.sqrt(shifted_points[:, 0]**2 + shifted_points[:, 1] **2))
-    t_norm = np.array([[scale_f, 0, -scale_f*mean_xy[0]],
-                         [0, scale_f, -scale_f * mean_xy[1]],
-                         [0, 0, 1]
-    ])
-    homo_points = np.append(points, np.ones((points.shape[0], 1)), axis=1)
-    norm_points = np.matmul(t_norm, homo_points.T).T
-    
-    return norm_points, t_norm
-
-"""Find F using RANSAC"""
-# def compute_fundamental_matrix(pts1, pts2, t1, t2, nIters=1000, tol=0.42):
-#     pts1 = np.array(pts1)
-#     pts2 = np.array(pts2)
-#     N = pts1.shape[0]
-#
-#     max_cnt, curr_itr = 0, 0
-#     bestF = np.zeros((3, 3))
-#     best_inliers = None
-#
-#     while curr_itr < nIters:
-#         # randomly sample 8 points to estimate a F
-#         indices = np.random.choice(np.arange(N), size=8, replace=False)
-#         F, _ = cv2.findFundamentalMat(pts1[indices, :], pts2[indices, :], cv2.FM_8POINT)
-#         # find epipolar lines on image 2
-#         L2s = np.matmul(pts1, F.T)
-#         # distance from lines to points pts2
-#         diffs = np.abs(np.sum(L2s * pts2, axis=1)) / np.sqrt(np.sum(L2s[:, :2] ** 2, axis=1))
-#         # count inliers and update best F
-#         inliers = (diffs <= tol) * 1
-#         cnt = np.sum(inliers)
-#         if cnt > max_cnt:
-#             # update best F
-#             max_cnt = cnt
-#             bestF = F
-#             best_inliers = inliers
-#
-#         curr_itr += 1
-#
-#     # denormalize
-#     bestF = t2.T@bestF@t1
-#     return  bestF
-
-def compute_fundamental_matrix(pts1, pts2, t1, t2):
-    pts1 = np.array(pts1)
-    pts2 = np.array(pts2)
-    F, _ = cv2.findFundamentalMat(pts1, pts2, cv2.FM_8POINT)
-    # denormalize
-    F = t2.T@F@t1
-    return  F
-
-# def compute_fundamental_matrix(input, target, t_i, t_t):
-#     # A equation matrix (x'x, x'y, x', y'x, y'y, y', x, y, 1) shape=(n, 9)
-#     A = np.concatenate((
-#         np.multiply(target[:, 0], input[:, 0]), np.multiply(target[:, 0], input[:, 1]), target[:, 0],
-#         np.multiply(target[:, 1], input[:, 0]), np.multiply(target[:, 1], input[:, 1]), target[:, 1],
-#         # input[:, 0], input[:, 1], np.ones((len(input), 1))[:, 0]
-#         input[:, 0], input[:, 1], np.ones(len(input))
-#     )).reshape((len(input), -1), order='F')
-#
-#     # SVD for A
-#     U, D, V = np.linalg.svd(A)
-#
-#     # extract smallest singular value, i.e., the last row of V
-#     F = V[-1, :].T.reshape(3, 3)
-#
-#     # singularity constraint: F to be singular and of rank 2
-#     U, D, V = np.linalg.svd(F)
-#
-#     # argmin(||F-F^'||_{Frobenius})
-#     F = np.dot(U, np.diag([D[0], D[1], 0])).dot(V)
-#
-#     # denormalize
-#     F = t_t.T.dot(F).dot(t_i)
-#
-#     return  F
+# from feature_detection import feature_points_detection, normalize
+from prewarp import compute_prewarp
+from postwarp import computeH
+from computeF import computeF
 
 def compute_rotation(v, t):
     # get rotation matrix
@@ -183,118 +91,6 @@ def bilinear(x, y, source_img):
             mat1.dot(mat2[:, :, 2]).dot(mat3)/((ceil(x) - floor(x))*(ceil(y) - floor(y))),
         ])
     return f
-
-
-def solve_prjective(t1, t2):
-    projective = lambda x : np.asarray([
-        t2[0][0]-(x[0]*t1[0][0]+x[1]*t1[0][1]+x[2]*1)/(x[6]*t1[0][0]+x[7]*t1[0][1]+1*1),
-        t2[0][1]-(x[3]*t1[0][0]+x[4]*t1[0][1]+x[5]*1)/(x[6]*t1[0][0]+x[7]*t1[0][1]+1*1),
-        t2[1][0]-(x[0]*t1[1][0]+x[1]*t1[1][1]+x[2]*1)/(x[6]*t1[1][0]+x[7]*t1[1][1]+1*1),
-        t2[1][1]-(x[3]*t1[1][0]+x[4]*t1[1][1]+x[5]*1)/(x[6]*t1[1][0]+x[7]*t1[1][1]+1*1),
-        t2[2][0]-(x[0]*t1[2][0]+x[1]*t1[2][1]+x[2]*1)/(x[6]*t1[2][0]+x[7]*t1[2][1]+1*1),
-        t2[2][1]-(x[3]*t1[2][0]+x[4]*t1[2][1]+x[5]*1)/(x[6]*t1[2][0]+x[7]*t1[2][1]+1*1),
-        t2[3][0]-(x[0]*t1[3][0]+x[1]*t1[3][1]+x[2]*1)/(x[6]*t1[3][0]+x[7]*t1[3][1]+1*1),
-        t2[3][1]-(x[3]*t1[3][0]+x[4]*t1[3][1]+x[5]*1)/(x[6]*t1[3][0]+x[7]*t1[3][1]+1*1)
-    ])
-
-    co = optimize.fsolve(projective, np.zeros(8))
-    co = np.append(co, 1).reshape(3, 3)
-    return co # for forward warping
-    # return linalg.inv(co) # for inverse warping
-
-
-def do_projective_warping(img, co, h, w, corners=False, shiftx=5, shifty=200): # test1
-# def do_projective_warping(img, co, h, w, corners=False, shiftx=300, shifty=200): # test2 BAD DON'T USE
-# def do_projective_warping(img, co, h, w, corners=False, shiftx=100, shifty=100): # test3
-    res = np.zeros((h + shifty, w + shiftx, 3)).astype(np.uint8)
-    co_inv = np.linalg.inv(co)
-    for i in range(h + shifty):
-        for j in range(w + shiftx):
-            from_pos = np.dot(co_inv, np.array([j - shiftx, i - shifty, 1]))
-            from_pos /= from_pos[2]
-            if from_pos[0] >= 0 and from_pos[0] < img.shape[1] and from_pos[1] >= 0 and from_pos[1] < img.shape[0]:
-                res[i, j, :] = bilinear(from_pos[0], from_pos[1], img)
-    
-    if not corners:
-        return res, []
-
-    #######################################  BUNK  ############################################
-    #   I don't want to explain why I have written these tedious codes to compute             #
-    #   some not really important corenrs, beacause I have been writing these homwork for a   #
-    #   full two days.                                                                        #
-    #   It always comes out some incomprehensible problems here or there but I have to move on#
-    #   beacause there is no time left.                                                       #
-    #   Writing these useless codes actually makes me feel at ease to some extent.            #
-    ###########################################################################################
-
-    is_valid = lambda pos : pos[0] + shiftx >= 0 and pos[0] < w  and pos[1] + shifty >= 0 and pos[1] < h 
-    cnt = 1
-    left_up = np.dot(co, np.array([0, 0, 1]))
-    left_up /= left_up[2]
-    while not is_valid(left_up):
-        left_up = np.dot(co, np.array([0 + cnt, 0 + cnt - 1, 1]))
-        left_up /= left_up[2]
-        if is_valid(left_up):
-            break
-        left_up = np.dot(co, np.array([0 + cnt - 1, 0 + cnt, 1]))
-        left_up /= left_up[2]
-        if is_valid(left_up):
-            break
-        cnt += 1
-    cnt = 1
-    right_up  = np.dot(co, np.array([0, img.shape[0] - 1, 1]))
-    right_up /= right_up[2]
-    while not is_valid(right_up):
-        right_up  = np.dot(co, np.array([0 + cnt, img.shape[0] - 1 - (cnt - 1), 1]))
-        right_up /= right_up[2]
-        if is_valid(right_up):
-            break
-        right_up  = np.dot(co, np.array([0 + cnt - 1, img.shape[0] - 1 - cnt, 1]))
-        right_up /= right_up[2]
-        if is_valid(right_up):
-            break
-        cnt += 1
-    cnt = 1
-    left_bottom = np.dot(co, np.array([img.shape[1] - 1, 0, 1]))
-    left_bottom /= left_bottom[2]
-    while not is_valid(left_bottom):
-        left_bottom = np.dot(co, np.array([img.shape[1] - 1 - cnt, 0 + cnt - 1, 1]))
-        left_bottom /= left_bottom[2]
-        if is_valid(left_bottom):
-            break
-        left_bottom = np.dot(co, np.array([img.shape[1] - 1 - (cnt - 1), 0 + cnt, 1]))
-        left_bottom /= left_bottom[2]
-        if is_valid(left_bottom):
-            break
-        cnt += 1
-    cnt = 1
-    right_bottom = np.dot(co, np.array([img.shape[1] - 1, img.shape[0] - 1, 1]))
-    right_bottom /= right_bottom[2]
-    while not is_valid(right_bottom):
-        right_bottom = np.dot(co, np.array([img.shape[1] - 1 - cnt, img.shape[0] - 1 - (cnt - 1), 1]))
-        right_bottom /= right_bottom[2]
-        if is_valid(right_bottom):
-            break
-        right_bottom = np.dot(co, np.array([img.shape[1] - 1 - (cnt - 1), img.shape[0] - 1 - cnt, 1]))
-        right_bottom /= right_bottom[2]
-        if is_valid(right_bottom):
-            break
-        cnt += 1
-    # corners = [tuple(left_up[0:2].astype(np.uint32)), tuple(right_up[0:2].astype(np.uint32)), tuple(left_bottom[0:2].astype(np.uint32)), tuple(right_bottom[0:2].astype(np.uint32))]
-    corners = [
-        (int(left_up[0] + shiftx), int(left_up[1] + shifty)),
-        (int(right_up[0] + shiftx), int(right_up[1] + shifty)),
-        (int(left_bottom[0] + shiftx), int(left_bottom[1] + shifty)),
-        (int(right_bottom[0] + shiftx), int(right_bottom[1] + shifty))
-    ]
-    corners.extend([
-        (int((corners[0][0] + corners[1][0])/2), int((corners[0][1] + corners[1][1])/2)),
-        (int((corners[0][0] + corners[2][0])/2), int((corners[0][1] + corners[2][1])/2)),
-        (int((corners[3][0] + corners[1][0])/2), int((corners[3][1] + corners[1][1])/2)),
-        (int((corners[3][0] + corners[2][0])/2), int((corners[3][1] + corners[2][1])/2)),
-    ])
-    return res, corners
-
 
 def feature_points_detection(img, show=False):
     detector = dlib.get_frontal_face_detector()
@@ -457,15 +253,17 @@ def morphing(input, points_input, trai_input, target, points_target, trai_target
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser(description='View Morphing')
+    parse.add_argument('-o', dest='outdir', type=str, default='./output', help='output or intermediate results dir')
     parse.add_argument('-i', dest='input', type=str, default='./images/part2-2/source_1.png', help='input image file location')
     parse.add_argument('-t', dest='target', type=str, default = './images/part2-2/target_1.png', help='input target file location')
     parse.add_argument('-s', dest='sequence', type=int, default = 5, help='length of the morphing sequence')
-    parse.add_argument('-b', dest='bilinear', default=True, type=ast.literal_eval, choices=[True, False], help='whether to use bilinear')
-    parse.add_argument('-a', dest='auto', default=False, type=ast.literal_eval, choices=[True, False], help='use feature points label or dlib automatical detection')
+    parse.add_argument('-b', dest='bilinear', action='store_true', help='whether to use bilinear')
+    parse.add_argument('-a', dest='auto', action='store_true', help='use feature points label or dlib automatical detection')
     parse.add_argument('-x', dest='shiftx', type=int, default = 5, help='shift x pixels for image after prewarping')
     parse.add_argument('-y', dest='shifty', type=int, default = 200, help='shift y pixels for image after prewarping')
     args = parse.parse_args()
 
+    os.makedirs(args.outdir, exist_ok=True)
     if not args.input or not args.target:
         print("Invalid parameters")
         exit(-1)
@@ -478,7 +276,7 @@ if __name__ == '__main__':
 
     # extract feature points manually
     if not args.auto:
-        input_points, target_points = read_feature_points(args.input), read_feature_points(args.target)
+        input_points, target_points = utils.read_feature_points(args.input), utils.read_feature_points(args.target)
     else:
         # extract feature points automatically
         input_points_auto, target_points_auto = feature_points_detection(input, show=False), feature_points_detection(target, show=False)
@@ -492,50 +290,24 @@ if __name__ == '__main__':
         target_points_four = [target_points_auto[p] for p in four_points]
         input_points, target_points = input_points_eight, target_points_eight
 
-    # prewarping
-    norm_input_points, norm_input_trans = normalize(input_points)
-    norm_target_points, norm_target_trans = normalize(target_points)
-
-    # F = compute_fundamental_matrix(norm_input_points, norm_target_points, norm_input_trans, norm_target_trans, nIters=1000, tol=1.0)
-    F = compute_fundamental_matrix(norm_input_points, norm_target_points, norm_input_trans, norm_target_trans)
-
+    # pre-warping
+    F = computeF(input_points, target_points)
     H0, H1 = compute_prewarp(F)
     
-    # input_pre_size = int(np.sqrt(input.shape[0]**2 + input.shape[1]**2) * 1.25) # for test1, 3
-    # target_pre_size = int(np.sqrt(target.shape[0]**2 + target.shape[1]**2) * 1.25)
-    # input_pre_size = int(np.sqrt(input.shape[0]**2 + input.shape[1]**2) * 1.5) # for test2 BAD DON'T USE 
-    # target_pre_size = int(np.sqrt(target.shape[0]**2 + target.shape[1]**2) * 1.5)
-
-    # input_prewarping, input_corners = do_projective_warping(input, H0, input_pre_size, input_pre_size, corners=True, shiftx=args.shiftx, shifty=args.shifty)
-    # target_prewarping, target_corners = do_projective_warping(target, H1, target_pre_size, target_pre_size, corners=True, shiftx=args.shiftx, shifty=args.shifty)
     input_prewarping, input_corners = utils.warpImage(input, H0)
     target_prewarping, target_corners = utils.warpImage(target, H1)
 
-    cv2.imwrite(args.input.split('/')[-1].split('.')[0] + '_prewarping.png', input_prewarping)
-    cv2.imwrite(args.target.split('/')[-1].split('.')[0] + '_prewarping.png', target_prewarping)
-
-    # DEBUD prewarping
-    # cv2.imshow("prewarpingi1", input_prewarping)
-    # cv2.imshow("prewarpingt1", target_prewarping)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    cv2.imwrite(os.path.join(args.outdir, args.input.split('/')[-1].split('.')[0] + '_prewarping.png'), input_prewarping)
+    cv2.imwrite(os.path.join(args.outdir, args.target.split('/')[-1].split('.')[0] + '_prewarping.png'), target_prewarping)
 
     # features detection
     input_prewarping_points = feature_points_detection(input_prewarping, show=False)
     target_prewarping_points = feature_points_detection(target_prewarping, show=False)
 
-    # DEBUD features detection 
-    # input_prewarping_points = feature_points_detection(cv2.imread(args.input.split('/')[-1].split('.')[0] + '_prewarping.png'), show=False)
-    # target_prewarping_points = feature_points_detection(cv2.imread(args.target.split('/')[-1].split('.')[0] + '_prewarping.png'), show=False)
-
     # delaunay triangulation
     points_input, trai_input = delaunay(input_prewarping, input_prewarping_points, input_corners, show=False)
     points_target, trai_target = delaunay(target_prewarping, target_prewarping_points, target_corners, show=False)
     
-    # DEBUD delaunay triangulation
-    # points_input, trai_input = delaunay(cv2.imread(args.input.split('/')[-1].split('.')[0] + '_prewarping.png'), input_prewarping_points, show=True)
-    # points_target, trai_target = delaunay(cv2.imread(args.target.split('/')[-1].split('.')[0] + '_prewarping.png'), target_prewarping_points, show=True)
-
     # plot input image
     plt.figure(figsize=(20, 12))
     plt.subplot(1, args.sequence + 2, 1)
@@ -545,44 +317,27 @@ if __name__ == '__main__':
     plt.yticks([])
 
     # view morphing and postwarping
-    
     for i in range(args.sequence):
         alpha = round((i + 1) / (args.sequence + 1), 2)
-        print("working on alpha: %f"%(alpha))
+        print("working on alpha: %f..."%(alpha))
         res = morphing(input_prewarping, points_input, trai_input, target_prewarping, points_target, trai_target, alpha)
 
-        # control points detection
-        # control_points = feature_points_detection(res, show=False)
-        # control_points_four = [control_points[p] for p in four_points]
-        # postwarping_four = [(int((1 - alpha) * input_points_four[p][0] + alpha * target_points_four[p][0]), 
-        #                        int((1 - alpha) * input_points_four[p][1] + alpha * target_points_four[p][1])) for p in range(4)]
-        # co = solve_prjective(control_points_four, postwarping_four)
-        # res, _ = do_projective_warping(res, co, res.shape[0], res.shape[1], corners=False, shiftx=0, shifty=0)
+        # control points
         control_points_four = [(int((1 - alpha) * input_corners[p][0] + alpha * target_corners[p][0]),
                              int((1 - alpha) * input_corners[p][1] + alpha * target_corners[p][1])) for p in range(4)]
+        # control_points_eight = [(int((1 - alpha) * input_corners[p][0] + alpha * target_corners[p][0]),
+        #                      int((1 - alpha) * input_corners[p][1] + alpha * target_corners[p][1])) for p in range(4)]
         new_height = max(input.shape[0], target.shape[0])
         new_width = max(input.shape[1], target.shape[1])
         postwarping_four = [(0, 0), (0, new_height - 1), (new_width - 1, new_height-1), (new_width - 1, 0)]
-        co = solve_prjective(control_points_four, postwarping_four)
-        # res, _ = do_projective_warping(res, co, new_height, new_width, corners=False, shiftx=0, shifty=0)
-
-        # control_points_eight = [(int((1 - alpha) * input_corners[p][0] + alpha * target_corners[p][0]),
-        #                      int((1 - alpha) * input_corners[p][1] + alpha * target_corners[p][1])) for p in range(4)]
-        # new_height = max(input.shape[0], target.shape[0])
-        # new_width = max(input.shape[1], target.shape[1])
         # postwarping_eight = [(0, 0), (0, new_height - 1), (new_width - 1, new_height - 1), (new_width - 1, 0)]#, \
-                            # (new_width - 1, (new_height - 1)/2), ((new_width - 1)/2, new_height - 1), (0, (new_height - 1)/2), ((new_width - 1)/2, 0)]
-        # Find homography using the points
-        # H_s = homography_points(control_points_eight, postwarping_eight)
-        H_s = utils.computeH(np.array(postwarping_four).T, np.array(control_points_four).T)
-        H_s /= H_s[-1,-1]
-        print(np.linalg.norm(co-H_s))
-        # warp image to desired plane
-        res = cv2.warpPerspective(res, co, (new_width, new_height), flags=cv2.INTER_LINEAR)
+        # (new_width - 1, (new_height - 1)/2), ((new_width - 1)/2, new_height - 1), (0, (new_height - 1)/2), ((new_width - 1)/2, 0)]
 
-        # co = solve_prjective(control_points_four, postwarping_four)
-        # # res, _ = do_projective_warping(res, co, new_height, new_width, corners=False, shiftx=0, shifty=0)
-        # res, _ = utils.warpImage(res, co)
+        # find homography using the points
+        H_s = computeH(np.array(postwarping_four).T, np.array(control_points_four).T)
+        H_s /= H_s[-1,-1]
+        # warp image to desired plane
+        res = cv2.warpPerspective(res, H_s, (new_width, new_height), flags=cv2.INTER_LINEAR)
 
         plt.subplot(1, args.sequence + 2, i + 2)
         plt.imshow(res[:, :, ::-1])
