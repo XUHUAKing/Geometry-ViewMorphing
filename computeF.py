@@ -11,6 +11,7 @@ def computeF(pts1, pts2):
     F, _ = cv2.findFundamentalMat(pts1, pts2, cv2.FM_8POINT)
     # denormalize
     F = t2.T @ F @ t1
+    F /= F[-1,-1]
     return F
 
 """Find F using RANSAC"""
