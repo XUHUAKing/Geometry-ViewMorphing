@@ -22,7 +22,7 @@ if __name__ == '__main__':
     parse.add_argument('-i', dest='input', type=str, default='./images/part2-2/source_1.png', help='input image file location')
     parse.add_argument('-t', dest='target', type=str, default = './images/part2-2/target_1.png', help='input target file location')
     parse.add_argument('-s', dest='sequence', type=int, default = 5, help='length of the morphing sequence')
-    parse.add_argument('-a', dest='auto', default=False, help='use feature points label or dlib automatical detection')
+    parse.add_argument('-a', dest='auto', action="store_true", help='use feature points label or dlib automatical detection')
     parse.add_argument('-x', dest='shiftx', type=int, default = 5, help='shift x pixels for image after prewarping')
     parse.add_argument('-y', dest='shifty', type=int, default = 200, help='shift y pixels for image after prewarping')
     args = parse.parse_args()
