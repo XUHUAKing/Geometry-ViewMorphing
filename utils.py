@@ -35,7 +35,7 @@ def read_feature_points(fpath):
         points.append([round(item['points'][0][0]), round(item['points'][0][1])])
     return points
 
-def warpImage(img, H):
+def warpImage(img, H, full=False):
     # warp image while keeping whole images in view
     # ref: https://stackoverflow.com/questions/13063201/how-to-show-the-whole-image-when-using-opencv-warpperspective
     h,w = img.shape[:2]
@@ -58,6 +58,8 @@ def warpImage(img, H):
     final_corners = []
     for cor in new_corners:
         final_corners.append((int(cor[0]), int(cor[1])))
+    if full:
+        return result, final_corners, Ht
     return result, final_corners
 
 def drawPoints(img, pts):
@@ -75,10 +77,11 @@ def displayEpipolarF(I1, I2, F):
     sy, sx, _ = I2.shape
 
     f, [ax1, ax2] = plt.subplots(1, 2, figsize=(12, 9))
-    ax1.imshow(I1)
+
+    ax1.imshow(np.array(cv2.cvtColor(I1, cv2.COLOR_BGR2RGB)))
     ax1.set_title('Select a point in this image')
     ax1.set_axis_off()
-    ax2.imshow(I2)
+    ax2.imshow(np.array(cv2.cvtColor(I2, cv2.COLOR_BGR2RGB)))
     ax2.set_title('Verify that the corresponding point \n is on the epipolar line in this image')
     ax2.set_axis_off()
     ax2.autoscale(enable=False, axis='both')
