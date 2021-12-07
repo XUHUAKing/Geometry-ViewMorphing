@@ -7,11 +7,3 @@
 ```bash
 requirements.txt
 ```
-
-### Content
-
-+ [Image Fusion](./imagefusion.py)
-+ [Face Morphing](./facemorphing.py)
-+ [View Morphing](./viewmorphing.py)
-
-### [Report](./report.pdf)
