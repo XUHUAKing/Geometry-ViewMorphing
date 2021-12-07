@@ -5,52 +5,6 @@ import cv2
 from scipy import linalg
 from math import sin, cos, asin, atan, pi, sqrt, floor, ceil
 
-def get_bounding_box(trai):
-    xmin = int(min([x[0] for x in trai]))
-    ymin = int(min([x[1] for x in trai]))
-    xmax = int(max([x[0] for x in trai]))
-    ymax = int(max([x[1] for x in trai]))
-    return (xmin, ymin, xmax, ymax)
-
-def bilinear(x, y, source_img):
-    # overflow case
-    if ceil(x) >= source_img.shape[1] or ceil(y) >= source_img.shape[0]:
-        return source_img[int(y), int(x), :]
-    # normal case
-    f11 = source_img[floor(y), floor(x), :]
-    f12 = source_img[ceil(y), floor(x), :]
-    f21 = source_img[floor(y), ceil(x), :]
-    f22 = source_img[floor(y), floor(x), :]
-    mat1 = np.array([ceil(x) - x, x - floor(x)])
-    mat2 = np.array([[f11, f12], [f21, f22]])
-    mat3 = np.array([ceil(y) - y, y - floor(y)])
-    if ceil(x) == floor(x) and ceil(y) == floor(y):
-        f = f11
-    elif ceil(x) == floor(x):
-        f = f11*(ceil(y) - y)/(ceil(y)-floor(y)) + f12*(y-floor(y))/(ceil(y)-floor(y))
-    elif ceil(y) == floor(y):
-        f = f11*(ceil(x) - x)/(ceil(x)-floor(x)) + f21*(x-floor(x))/(ceil(x)-floor(x))
-    else:
-        f = np.array([
-            mat1.dot(mat2[:, :, 0]).dot(mat3)/((ceil(x) - floor(x))*(ceil(y) - floor(y))),
-            mat1.dot(mat2[:, :, 1]).dot(mat3)/((ceil(x) - floor(x))*(ceil(y) - floor(y))),
-            mat1.dot(mat2[:, :, 2]).dot(mat3)/((ceil(x) - floor(x))*(ceil(y) - floor(y))),
-        ])
-    return f
-
-def solve_affine(t1, t2):
-    t1 = np.concatenate((t1, np.ones((3, 1))), axis=1)
-    A = np.zeros((6, 6))
-    for i in range(6):
-        A[i, 3 * (i % 2): 3 + 3 * (i % 2)] = t1[i // 2]
-
-    b = t2.flatten()
-    x = linalg.solve(A, b)
-    x = np.append(x, [0, 0, 1]).reshape(3, 3)
-
-    return linalg.inv(x)
-
-
 def apply_affine(input, target, res, t1, t2, t, alpha):
     # get bounding boxes
     bb1 = list(cv2.boundingRect(t1))
