@@ -1,17 +1,6 @@
-# NaiveImageFusionAndMorphing
+# Facial Image View Synthesis - A way to preserve 3D shape
+Implementation of Image Morphing and View Morphing
 
-> Naive image fusion, face morphing and view morphing algorithms implemented with python
+This repo is for final project of *16-822: Geometry-Based Methods in Vision* in Carnegie Mellon University.
 
-### Requirements
-
-```bash
-requirements.txt
-```
-
-### Content
-
-+ [Image Fusion](./imagefusion.py)
-+ [Face Morphing](./facemorphing.py)
-+ [View Morphing](./viewmorphing.py)
-
-### [Report](./report.pdf)
+Authors: Xinjie Yao, Xiaochen Han, Xuhua Huang
