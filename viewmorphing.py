@@ -52,8 +52,10 @@ if __name__ == '__main__':
 
     # pre-warping
     F = computeF(input_points, target_points)
-    H0, H1 = compute_prewarp(F)
-    
+    H0, H1= compute_prewarp(F)
+    input_prewarping, input_corners, Ht0 = utils.warpImage(input, H0, True)
+    target_prewarping, target_corners, Ht1 = utils.warpImage(target, H1, True)
+    # utils.displayEpipolarF(input_prewarping, target_prewarping, np.linalg.inv(Ht1 @ H1).T @ F @ np.linalg.inv(Ht0 @ H0))
     input_prewarping, input_corners = utils.warpImage(input, H0)
     target_prewarping, target_corners = utils.warpImage(target, H1)
 

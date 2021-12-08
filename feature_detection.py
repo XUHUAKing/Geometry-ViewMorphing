@@ -31,7 +31,9 @@ def feature_points_detection(im, show=False):
     if show:
         im_new = im.copy()
         for i in range(len(shape_np)):
-            cv2.circle(im_new, tuple(shape_np[i]), 2, (0, 255, 0), -1)
+            cv2.circle(im_new, tuple(shape_np[i]), 2, (0, 0, 255), -1)
+            cv2.putText(im_new, str(i), tuple(shape_np[i]), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.2 ,(209, 80, 0, 255), 1)
         cv2.imshow("feature points", im_new)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -44,3 +46,4 @@ if __name__ == '__main__':
     image1 = cv2.imread('./images/part2-2/source_3.png')
     image2 = cv2.imread('./images/part2-2/target_3.png')
     shape_1 = feature_points_detection(image1, show=True)
+    shape_2 = feature_points_detection(image2, show=True)
